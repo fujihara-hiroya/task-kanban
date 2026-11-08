@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 概要
 
-タスク管理カンバンアプリ。現状は `create-next-app` の雛形に Vitest を追加しただけの段階。
+タスク管理カンバンアプリ。現状は `create-next-app` の雛形に Vitest と Supabase の接続設定を追加した段階（テーブルは未作成）。
 
 ## 技術スタック
 
@@ -18,14 +18,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | スタイリング | Tailwind CSS v4（`@tailwindcss/turbopack`） |
 | テスト | Vitest 5 / React Testing Library / jsdom |
 | Lint | ESLint 9（`eslint-config-next`） |
+| バックエンド | Supabase（`@supabase/supabase-js` / `@supabase/ssr`） |
 
 ## ディレクトリ構成
 
 ```
 task-kanban/
 ├── src/
-│   └── app/              # App Router のルート（layout.tsx / page.tsx / globals.css）
+│   ├── app/              # App Router のルート（layout.tsx / page.tsx / globals.css）
+│   ├── lib/supabase/     # Supabase クライアントと接続チェック
+│   └── instrumentation.ts # サーバー起動時の処理（Supabase 接続チェック）
 ├── __tests__/            # Vitest のテスト
+├── .env.example          # 環境変数のキー一覧（値は .env.local に書く）
 ├── public/               # 静的ファイル
 ├── next.config.ts        # Next.js 設定（Cache Components / Turbopack ローダー）
 ├── vitest.config.mts     # Vitest 設定
@@ -59,6 +63,17 @@ npx vitest run -t "見出し"                 # テスト名で絞り込み
 - **Cache Components が有効**（`next.config.ts` の `cacheComponents: true` + `partialPrefetching: true`）。データ取得はデフォルトで動的で、キャッシュは `"use cache"` / `cacheLife` / `cacheTag` で明示する。ルートセグメント設定の `runtime` export は使えない（Node.js ランタイム必須）。詳細は `docs/01-app/01-getting-started/08-caching.md`、`docs/01-app/03-api-reference/05-config/01-next-config-js/cacheComponents.md`。
 - `LayoutProps<"/">` / `PageProps` などのルート型はグローバルに生成される型ヘルパー（import 不要）。
 - `AGENTS.md` は `next dev` が自動で再生成するファイル。手で消しても戻るので、変更があればそのままコミットしてよい。
+
+## Supabase
+
+- プロジェクト: `task-kanban`（ID `yzvqdigszdmkpxmyfzdk`、`ap-northeast-1`）。MCP（`.mcp.json` の `supabase`）で参照・操作できる。
+- 環境変数は `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`。キーは `.env.example`、実際の値は `.env.local`（Git 管理外）。キーは旧来の anon key ではなく publishable key（`sb_publishable_...`）を使う。
+- クライアントは用途で使い分ける。どちらも `createClient()` を export している。
+  - `@/lib/supabase/server`：Server Component / Server Action / Route Handler 用（`async`、`next/headers` の `cookies()` を使う）。リクエストごとに作り、グローバルに保持しない。
+  - `@/lib/supabase/client`：Client Component（`"use client"`）用。
+- 環境変数は直接読まず、`@/lib/supabase/env` の `getSupabaseEnv()` を使う（未設定なら変数名入りのエラーを投げる）。`process.env[name]` や分割代入のような動的な参照はブラウザ向けにインライン化されないので、`process.env.NEXT_PUBLIC_XXX` と直接書くこと。
+- `src/instrumentation.ts` の `register()` がサーバー起動時に `checkSupabaseConnection()`（Auth の `/auth/v1/health` を叩く）を実行し、**失敗時のみ** `console.error` で `[Supabase] 接続に失敗しました: <理由>` を出す。成功時は何も出さない。
+- テストでは環境変数を `vi.stubEnv`、`fetch` を `vi.stubGlobal` でモックする（`__tests__/check-connection.test.ts` 参照）。
 
 ## スタイリング
 
