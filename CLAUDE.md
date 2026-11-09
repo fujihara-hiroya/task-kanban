@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 概要
 
-タスク管理カンバンアプリ。現状は `create-next-app` の雛形に Vitest と Supabase の接続設定を追加した段階（テーブルは未作成）。
+タスク管理カンバンアプリ。`/tasks` にタスクの CRUD（一覧・追加・編集・削除）を持つ3列カンバンがある。`/`（ホーム）は `/tasks` へリダイレクトする（`src/app/page.tsx`、テストは `__tests__/page.test.tsx`）。
 
 ## 技術スタック
 
@@ -26,7 +26,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 task-kanban/
 ├── src/
 │   ├── app/              # App Router のルート（layout.tsx / page.tsx / globals.css）
-│   ├── lib/supabase/     # Supabase クライアントと接続チェック
+│   │   └── tasks/        # タスク画面（page.tsx / actions.ts / _components/）
+│   ├── lib/supabase/     # Supabase クライアントと接続チェック（database.types.ts は生成物）
+│   ├── lib/tasks/        # タスクの型・検証（validation.ts）・取得（queries.ts）
 │   └── instrumentation.ts # サーバー起動時の処理（Supabase 接続チェック）
 ├── __tests__/            # Vitest のテスト
 ├── .env.example          # 環境変数のキー一覧（値は .env.local に書く）
@@ -71,9 +73,22 @@ npx vitest run -t "見出し"                 # テスト名で絞り込み
 - クライアントは用途で使い分ける。どちらも `createClient()` を export している。
   - `@/lib/supabase/server`：Server Component / Server Action / Route Handler 用（`async`、`next/headers` の `cookies()` を使う）。リクエストごとに作り、グローバルに保持しない。
   - `@/lib/supabase/client`：Client Component（`"use client"`）用。
+- `server.ts` の `createClient()` は `createServerClient<Database>`（`database.types.ts`）で型付け済み。`client.ts` は未対応なので、テーブル操作は `server` 側で行う。
 - 環境変数は直接読まず、`@/lib/supabase/env` の `getSupabaseEnv()` を使う（未設定なら変数名入りのエラーを投げる）。`process.env[name]` や分割代入のような動的な参照はブラウザ向けにインライン化されないので、`process.env.NEXT_PUBLIC_XXX` と直接書くこと。
 - `src/instrumentation.ts` の `register()` がサーバー起動時に `checkSupabaseConnection()`（Auth の `/auth/v1/health` を叩く）を実行し、**失敗時のみ** `console.error` で `[Supabase] 接続に失敗しました: <理由>` を出す。成功時は何も出さない。
 - テストでは環境変数を `vi.stubEnv`、`fetch` を `vi.stubGlobal` でモックする（`__tests__/check-connection.test.ts` 参照）。
+
+## タスク機能（`/tasks`）
+
+- テーブル `public.tasks`：`id`(uuid) / `title`(1〜100文字) / `description`(〜1000文字、既定 `''`) / `status`(`todo` | `doing` | `done`、既定 `todo`) / `created_at` / `updated_at`（更新トリガーで自動更新）。制約は DB の CHECK と `lib/tasks/validation.ts` の両方で守る（上限値は後者の定数）。
+- RLS は有効。**認証導入前の暫定として anon に SELECT/INSERT/UPDATE/DELETE を全許可**している（マイグレーション `create_tasks_table`）。認証を入れるときはユーザー単位のポリシーに差し替えること。
+- スキーマを変えたら Supabase MCP の `apply_migration` で適用し、`generate_typescript_types` の出力で `src/lib/supabase/database.types.ts` を更新する。
+- 更新系は Server Action（`src/app/tasks/actions.ts`：`createTask` / `updateTask` / `deleteTask`）。検証 → Supabase 操作 → `revalidatePath("/tasks")` の順で、結果は `ActionResult`（`{ ok: true }` または `{ ok: false, error }`）で返す。`revalidatePath` により、操作結果は Action のレスポンスに同梱された最新の画面で即座に一覧へ反映される。Supabase クライアントは `cookies()` を使うため `"use cache"` / `updateTag` は使えない。
+- 型は `lib/tasks/types.ts`（`Task` / `TaskStatus` / `RawTaskInput`（検証前）/ `TaskInput`（検証済み）/ `ActionResult` / `isTaskStatus`）。ステータスの追加・変更は `taskStatuses`、画面の表示名 `_components/status-labels.ts` の `statusLabels`、DB の CHECK の3か所を揃える。
+- 検証は `validateTaskInput()`：前後の空白を trim し、文字数はコードポイント単位（DB の `char_length` と同じ）で数える。エラーメッセージは日本語の固定文言で、DB の生エラーは画面に出さない。
+- 一覧取得は `getTasks()`（`lib/tasks/queries.ts`）。`page.tsx` は同期コンポーネントで、`<Suspense>` の内側の async コンポーネントがデータを取得する（Cache Components の制約）。
+- 画面の Client Component（`TaskBoard` / `TaskForm` / `TaskCard`）は Action を props で受け取る。テストでは Action だけを差し替えればよい。削除前の確認は `window.confirm`（テストは `vi.spyOn(window, "confirm")`）。
+- テストは `__tests__/tasks/`（`validation` / `actions` / `task-board`）。`user-event` は未導入のため、操作は `fireEvent` で行う。
 
 ## スタイリング
 
