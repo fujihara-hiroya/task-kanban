@@ -16,6 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | UI | React 19.3 |
 | 言語 | TypeScript 5（strict） |
 | スタイリング | Tailwind CSS v4（`@tailwindcss/turbopack`） |
+| UI コンポーネント | shadcn/ui（`base-nova`、Base UI ベース、アイコンは `lucide-react`） |
 | テスト | Vitest 5 / React Testing Library / jsdom |
 | Lint | ESLint 9（`eslint-config-next`） |
 | バックエンド | Supabase（`@supabase/supabase-js` / `@supabase/ssr`） |
@@ -27,10 +28,13 @@ task-kanban/
 ├── src/
 │   ├── app/              # App Router のルート（layout.tsx / page.tsx / globals.css）
 │   │   └── tasks/        # タスク画面（page.tsx / actions.ts / _components/）
+│   ├── components/ui/    # shadcn/ui のコンポーネント（`npx shadcn add` で追加される）
+│   ├── lib/utils.ts      # `cn()`（クラス名の結合・マージ）
 │   ├── lib/supabase/     # Supabase クライアントと接続チェック（database.types.ts は生成物）
 │   ├── lib/tasks/        # タスクの型・検証（validation.ts）・取得（queries.ts）
 │   └── instrumentation.ts # サーバー起動時の処理（Supabase 接続チェック）
 ├── __tests__/            # Vitest のテスト
+├── components.json       # shadcn/ui の設定
 ├── .env.example          # 環境変数のキー一覧（値は .env.local に書く）
 ├── public/               # 静的ファイル
 ├── next.config.ts        # Next.js 設定（Cache Components / Turbopack ローダー）
@@ -92,7 +96,29 @@ npx vitest run -t "見出し"                 # テスト名で絞り込み
 
 ## スタイリング
 
-Tailwind v4 は PostCSS ではなく Turbopack のローダー（`next.config.ts` の `turbopack.rules` で `*.css` に `@tailwindcss/turbopack`）で処理している。`postcss.config` や `tailwind.config` は存在しない。テーマトークンは `src/app/globals.css` の `@theme inline` で CSS 変数（`--background` / `--foreground`、ダークモードは `prefers-color-scheme`）から定義している。
+Tailwind v4 は PostCSS ではなく Turbopack のローダー（`next.config.ts` の `turbopack.rules` で `*.css` に `@tailwindcss/turbopack`）で処理している。`postcss.config` や `tailwind.config` は存在しない。テーマトークンは `src/app/globals.css` に定義している（`@theme inline` で CSS 変数を Tailwind のトークンに対応付け、値は `:root` / `.dark` に置く）。ダークモードは `prefers-color-scheme` ではなく `.dark` クラス（`@custom-variant dark`）で切り替える仕組みで、現時点では `.dark` を付ける処理は入れていない。
+
+## shadcn/ui
+
+- 設定は `components.json`（style `base-nova`、baseColor `neutral`、CSS 変数あり、Tailwind config は空）。エイリアスは `@/components` / `@/components/ui` / `@/lib/utils` / `@/hooks`。
+- コンポーネントの追加は `npx shadcn@latest add <name>`（例：`button`）。ソースが `src/components/ui/` にコピーされるので、必要なら直接編集してよい。追加前に `--dry-run` / `--diff` で差分を確認できる。
+- `cn()` は `src/lib/utils.ts` が `cn` パッケージから再エクスポートしている（`clsx` + `tailwind-merge` ではない）。クラス名の結合は `@/lib/utils` の `cn` を使う。
+- `shadcn init` は `globals.css` を書き換える。再実行するとテーマが上書きされるので注意。
+- 導入済みのコンポーネント：`button` / `card` / `input` / `textarea` / `label` / `badge` / `skeleton` / `alert` / `native-select`。タスク画面（`TaskBoard` / `TaskForm` / `TaskCard`）はこれらで構成している。ステータス選択はテストが `fireEvent.change` で操作するため、Base UI の Select ではなくネイティブの `NativeSelect` を使う。
+- 使い方・最新仕様は Context7 MCP で確認する（`/shadcn-ui/ui`）。
+
+## デザインルール
+
+- **部品は shadcn/ui を使う**：ボタン・入力・カード・バッジ・アラート等は素の HTML + Tailwind で書かず `@/components/ui/` のコンポーネントを使う。足りなければ `npx shadcn@latest add <name>` で追加する。
+- **色はテーマトークンで指定する**：`bg-muted` / `text-muted-foreground` / `text-destructive` / `border-input` など。`text-red-600` のような固定色や `bg-foreground/5` のような場当たり的な透過は使わない。例外は列のアクセント色（`task-board.tsx` の `columnAccents`：未着手=slate、進行中=blue、完了=emerald）のみ。
+- **アイコンは `lucide-react`**。アイコンだけのボタンは `size="icon-sm"` の `Button` + `aria-label` を付ける（ラベルはテストからも参照される）。
+- **エラー表示は `Alert variant="destructive"`**（`role="alert"` が付く）。
+- **フォーム**：`Label`（`htmlFor` + `useId`）+ `Input` / `Textarea` / `NativeSelect` を `Card` で包み、操作ボタンは `CardFooter` に右寄せで置く（キャンセル=`outline`、保存=既定）。ステータス選択は `fireEvent.change` で操作するテストがあるため、Base UI の Select は使わずネイティブの `NativeSelect` を使う。フォームは Dialog にせずインライン表示にする。
+- **レイアウト**：ページは幅の上限を設けず画面全体を使う（`main` は `px-4 sm:px-8 lg:px-12`、背景 `bg-muted/30`）。カンバンの3列は `flex` で**常に横並び**（`flex-1 basis-0 min-w-72`）にし、狭い画面では縦に積まず横スクロールにする。列は `min-h-[60vh]` で縦に伸ばす。
+- **カード・列**：角丸は `rounded-xl`。タスクカードは `Card size="sm"`（`shadow-sm`、hover で `shadow-md`）。列ヘッダーは「色ドット + 見出し + 件数 `Badge`」、空の列は破線ボーダーのプレースホルダ。
+- **読み込み中は `Skeleton`** で本番と同じ3列構成のプレースホルダを出す。
+- **ダークモード**：`.dark` クラス方式で未対応のため、トークンを使っておけば将来そのまま切り替えられる状態を保つ。
+- デザインを変えたら `npm test` に加え、Playwright MCP でデスクトップ（1280px 以上）と狭幅（390px）の表示、追加・編集・削除（`browser_handle_dialog` で confirm を承認/拒否）の動作を確認する。確認用に作ったタスクは削除して DB を元に戻す。
 
 ## テスト
 
