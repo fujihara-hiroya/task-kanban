@@ -7,6 +7,8 @@ export type Task = {
   title: string;
   description: string;
   status: TaskStatus;
+  /** 追加・更新日時（ISO 8601）。追加直後は作成日時と同じ */
+  updatedAt: string;
 };
 
 /** 検証前の入力値（ステータスは任意の文字列が来うる） */
