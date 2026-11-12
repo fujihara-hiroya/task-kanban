@@ -6,7 +6,7 @@ export async function getTasks(): Promise<Task[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("tasks")
-    .select("id, title, description, status")
+    .select("id, title, description, status, updated_at")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -17,6 +17,7 @@ export async function getTasks(): Promise<Task[]> {
     id: row.id,
     title: row.title,
     description: row.description,
+    updatedAt: row.updated_at,
     // DB の CHECK 制約で保証されているが、型としては string なので絞り込む
     status: isTaskStatus(row.status) ? row.status : "todo",
   }));

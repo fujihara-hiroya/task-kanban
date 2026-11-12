@@ -14,18 +14,21 @@ const buyMilk: Task = {
   title: "買い物",
   description: "牛乳を買う",
   status: "todo",
+  updatedAt: "2026-01-02T03:04:05Z",
 };
 const writeCode: Task = {
   id: "task-2",
   title: "実装",
   description: "",
   status: "doing",
+  updatedAt: "2026-03-04T15:30:00Z",
 };
 const review: Task = {
   id: "task-3",
   title: "レビュー",
   description: "PR を確認する",
   status: "done",
+  updatedAt: "2026-12-31T14:59:00Z",
 };
 
 const ok: ActionResult = { ok: true };
@@ -94,6 +97,18 @@ describe("一覧表示", () => {
     setup([buyMilk]);
 
     expect(screen.getByText("牛乳を買う")).toBeDefined();
+  });
+
+  test("各タスクに更新日時が日本時間で表示される", () => {
+    setup([buyMilk, writeCode, review]);
+    expect(screen.getByText("更新: 2026/01/02 12:04")).toBeTruthy();
+    expect(screen.getByText("更新: 2026/03/05 00:30")).toBeTruthy();
+    expect(screen.getByText("更新: 2026/12/31 23:59")).toBeTruthy();
+  });
+
+  test("更新日時が不正な値のときも、画面は壊れずタスクが表示される", () => {
+    setup([{ ...buyMilk, updatedAt: "invalid" }]);
+    expect(screen.getByText("買い物")).toBeTruthy();
   });
 
   test("タスクが1件も無いときは、各列に「タスクはありません」と表示される", () => {

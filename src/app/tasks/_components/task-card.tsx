@@ -5,11 +5,27 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardAction,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import type { Task } from "@/lib/tasks/types";
+
+const updatedAtFormatter = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** 追加・更新日時を表示用に整形する（サーバーとブラウザで差が出ないよう JST 固定） */
+function formatUpdatedAt(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : updatedAtFormatter.format(date);
+}
 
 type TaskCardProps = {
   task: Task;
@@ -51,6 +67,14 @@ export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
           </Button>
         </CardAction>
       </CardHeader>
+      <CardContent>
+        <time
+          dateTime={task.updatedAt}
+          className="text-xs text-muted-foreground"
+        >
+          更新: {formatUpdatedAt(task.updatedAt)}
+        </time>
+      </CardContent>
     </Card>
   );
 }
